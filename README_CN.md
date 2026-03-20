@@ -1,12 +1,26 @@
 # Format GraphQL
 
-Raycast 扩展，用于格式化从 Chrome DevTools / ProxyMan 等地方复制的 GraphQL 请求。
+Raycast 扩展，用于格式化从 Chrome DevTools / ProxyMan / Charles 等地方复制的 GraphQL 请求。
 
 ## 功能
 
 - 解析 JSON 请求体（`{"query":"...","variables":{...}}`）, 格式化成 query 和 variables 分离的 GraphQL 查询代码，方便粘贴到 graphiql、GraphQL Playground、Apollo Studio 等工具中
 - 支持批量操作（查询数组）
 - 结果直接复制到剪贴板
+
+## 功能截图
+
+### Chrome DevTools Network 面板复制 GraphQL 请求
+
+<img src="docs/screenshot/chrome-dev-tools-request-source.png" alt="Chrome DevTools Network 面板复制 GraphQL 请求" width="600"/>
+
+### Input 界面
+
+<img src="docs/screenshot/raycast-format-graphql-input.png" alt="Input 界面" width="600"/>
+
+### Output 界面
+
+<img src="docs/screenshot/raycast-format-graphql-output.png" alt="Output 界面" width="600"/>
 
 ## 安装到 Raycast
 
