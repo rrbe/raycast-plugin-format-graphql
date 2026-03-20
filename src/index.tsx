@@ -1,4 +1,15 @@
-import { Icon, Form, ActionPanel, Action, showToast, Clipboard, Toast, showHUD, popToRoot } from "@raycast/api";
+import {
+  Icon,
+  Form,
+  Detail,
+  ActionPanel,
+  Action,
+  showToast,
+  Clipboard,
+  Toast,
+  useNavigation,
+} from "@raycast/api";
+import { useState } from "react";
 
 interface CommandForm {
   input: string;
@@ -59,7 +70,6 @@ function formatGraphQL(source: string, indent: string): string {
     }
 
     if (ch === "{") {
-      // Trim trailing space before brace
       out = out.replace(/ +$/, "");
       out += " {";
       depth++;
@@ -71,13 +81,11 @@ function formatGraphQL(source: string, indent: string): string {
 
     if (ch === "}") {
       depth = Math.max(0, depth - 1);
-      // Trim trailing whitespace/newline
       out = out.replace(/\s+$/, "");
       emitNewline();
       out += "}";
       i++;
       skipWhitespace();
-      // If next char is not } or end, add newline
       if (i < len && source[i] !== "}" && source[i] !== ")") {
         emitNewline();
       }
@@ -87,7 +95,6 @@ function formatGraphQL(source: string, indent: string): string {
     if (ch === "(") {
       out += "(";
       i++;
-      // Collect everything inside parens (handles nesting)
       let parenDepth = 1;
       while (i < len && parenDepth > 0) {
         if (source[i] === "(") parenDepth++;
@@ -100,10 +107,8 @@ function formatGraphQL(source: string, indent: string): string {
       continue;
     }
 
-    // Collapse whitespace: newlines and spaces between tokens
     if (/\s/.test(ch)) {
       skipWhitespace();
-      // Don't add leading space at start of line
       if (out.length > 0 && !/\n\s*$/.test(out)) {
         out += " ";
       }
@@ -139,14 +144,9 @@ function parseInput(raw: string): ParsedOperation[] {
     }
 
     const variables = item.variables ? JSON.stringify(item.variables, null, 2) : null;
-
     const operationName = item.operationName || extractOperationName(item.query) || `Operation ${i + 1}`;
 
-    return {
-      operation: item.query,
-      variables,
-      operationName,
-    };
+    return { operation: item.query, variables, operationName };
   });
 }
 
@@ -160,59 +160,76 @@ function isValidJSON(input: string): boolean {
 }
 
 function isValidGraphQLQuery(input: string): boolean {
-  // Basic check: contains GraphQL-like keywords or brace structure
   return /^\s*(query|mutation|subscription|fragment|\{)/.test(input);
 }
 
-export default function Command() {
-  function handleSubmit(values: CommandForm) {
-    const { input, indent } = values;
+function buildOutput(input: string, indentStr: string): string {
+  if (isValidJSON(input)) {
+    const operations = parseInput(input);
+    const parts = operations.map((op) => {
+      let part = `# ${op.operationName}\n${formatGraphQL(op.operation, indentStr)}`;
+      if (op.variables) {
+        part += `\n\n# Variables\n${op.variables}`;
+      }
+      return part;
+    });
+    return parts.join("\n\n---\n\n");
+  } else if (isValidGraphQLQuery(input)) {
+    return formatGraphQL(input, indentStr);
+  } else {
+    throw new Error("Invalid GraphQL");
+  }
+}
 
-    if (input.trim().length === 0) {
+function ResultView({ output }: { output: string }) {
+  const markdown = "```graphql\n" + output + "\n```";
+
+  return (
+    <Detail
+      markdown={markdown}
+      actions={
+        <ActionPanel>
+          <Action.CopyToClipboard title="Copy to Clipboard" content={output} />
+          <Action.Paste title="Paste to Active App" content={output} />
+        </ActionPanel>
+      }
+    />
+  );
+}
+
+export default function Command() {
+  const { push } = useNavigation();
+  const [input, setInput] = useState("");
+
+  function handleSubmit(values: CommandForm) {
+    const trimmed = values.input.trim();
+
+    if (trimmed.length === 0) {
       showToast({ style: Toast.Style.Failure, title: "Empty input" });
       return;
     }
 
-    const indentStr = indent === "tab" ? "\t" : " ".repeat(parseInt(indent));
-
-    let output = "";
+    const indentStr = values.indent === "tab" ? "\t" : " ".repeat(parseInt(values.indent));
 
     try {
-      if (isValidJSON(input)) {
-        const operations = parseInput(input);
-        const parts = operations.map((op) => {
-          let part = `# ${op.operationName}\n${formatGraphQL(op.operation, indentStr)}`;
-          if (op.variables) {
-            part += `\n\n# Variables\n${op.variables}`;
-          }
-          return part;
-        });
-        output = parts.join("\n\n---\n\n");
-      } else if (isValidGraphQLQuery(input)) {
-        output = formatGraphQL(input, indentStr);
-      } else {
-        showToast({ style: Toast.Style.Failure, title: "Invalid GraphQL" });
-        return;
-      }
+      const output = buildOutput(trimmed, indentStr);
+      Clipboard.copy(output);
+      showToast({ style: Toast.Style.Success, title: "Copied to clipboard" });
+      push(<ResultView output={output} />);
     } catch (e) {
       showToast({ style: Toast.Style.Failure, title: "Parse error", message: (e as Error).message });
-      return;
     }
-
-    Clipboard.copy(output);
-    showHUD("Copied to clipboard");
-    popToRoot();
   }
 
   return (
     <Form
       actions={
         <ActionPanel>
-          <Action.SubmitForm icon={Icon.Checkmark} title="Format and Copy" onSubmit={handleSubmit} />
+          <Action.SubmitForm icon={Icon.Checkmark} title="Format" onSubmit={handleSubmit} />
         </ActionPanel>
       }
     >
-      <Form.TextArea id="input" title="Input" placeholder="Paste GraphQL here…" />
+      <Form.TextArea id="input" title="Input" placeholder="Paste GraphQL here…" value={input} onChange={setInput} />
       <Form.Dropdown id="indent" title="Indentation" storeValue>
         <Form.Dropdown.Item value="tab" title="Tabs" />
         <Form.Dropdown.Item value="2" title="Spaces: 2" />
